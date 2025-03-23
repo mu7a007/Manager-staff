@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام الكوادر</title>
+    <link rel="manifest" href="manifest.json">
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background: #f0f2f5;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 2px 15px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            color: #1a73e8;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .form-container {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 15px;
+        }
+
+        input, select {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            min-width: 200px;
+        }
+
+        button {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+
+        button:hover { opacity: 0.9; }
+
+        .export-btn { background: #34a853; color: white; }
+        .import-btn { 
+            background: #fbbc05; 
+            color: white;
+            position: relative;
+            padding: 12px 25px;
+        }
+        .print-btn { background: #1a73e8; color: white; }
+        .delete-btn { background: #ea4335; color: white; }
+
+        .table-wrapper { overflow-x: auto; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th, td {
+            padding: 15px;
+            text-align: center;
+            border-bottom: 2px solid #eee;
+        }
+
+        th { background: #1a73e8; color: white; }
+        tr:hover { background: #f8f9fa; }
+
+        .actions button { margin: 0 5px; padding: 8px 15px; }
+
+        @media (max-width: 768px) {
+            .input-group { flex-direction: column; }
+            input, select { width: 100%; }
+        }
+
+        @media print {
+            .actions, 
+            .form-container,
+            button { display: none !important; }
+            
+            .container {
+                box-shadow: none;
+                padding: 0;
+            }
+            
+            table {
+                width: 100% !important;
+                font-size: 14px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🗃️ نظام إدارة الكوادر</h1>
+        
+        <div class="form-container">
+            <div class="input-group">
+                <input type="text" id="name" placeholder="الاسم الكامل" required>
+                <input type="text" id="branch" placeholder="الفرع / القسم" required>
+                <select id="shift" required>
+                    <option value="أ">أ</option>
+                    <option value="ج">ج</option>
+                </select>
+                <input type="date" id="joinDate" required>
+                <button onclick="addMember()">➕ إضافة</button>
+            </div>
+            
+            <div class="input-group">
+                <button class="export-btn" onclick="exportCSV()">📤 تصدير CSV</button>
+                <label class="import-btn">
+                    📥 استيراد CSV
+                    <input type="file" id="csvFile" hidden accept=".csv" onchange="importCSV(event)">
+                </label>
+                <button class="print-btn" onclick="showPrint()">🖨️ معاينة الطباعة</button>
+            </div>
+        </div>
+
+        <div class="table-wrapper">
+            <table id="mainTable">
+                <thead>
+                    <tr>
+                        <th>م</th>
+                        <th>الاسم</th>
+                        <th>الفرع</th>
+                        <th>النوبة</th>
+                        <th>تاريخ الانتساب</th>
+                        <th>الإجراءات</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        let members = JSON.parse(localStorage.getItem('members')) || [];
+        let editId = null;
+
+        // حفظ البيانات
+        function saveData() {
+            localStorage.setItem('members', JSON.stringify(members));
+        }
+
+        // إضافة/تعديل عضو
+        function addMember() {
+            const member = {
+                id: editId || Date.now(),
+                name: document.getElementById('name').value.trim(),
+                branch: document.getElementById('branch').value.trim(),
+                shift: document.getElementById('shift').value,
+                date: document.getElementById('joinDate').value
+            };
+
+            if (!member.name || !member.branch || !member.date) {
+                return alert('الرجاء ملء جميع الحقول المطلوبة');
+            }
+
+            if (editId) {
+                const index = members.findIndex(m => m.id === editId);
+                members[index] = member;
+            } else {
+                members.push(member);
+            }
+
+            saveData();
+            updateTable();
+            clearForm();
+        }
+
+        // تحديث الجدول
+        function updateTable() {
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = members.map((member, index) => `
+                <tr>
+                    <td>${index + 1}</td>
+                    <td>${member.name}</td>
+                    <td>${member.branch}</td>
+                    <td>${member.shift}</td>
+                    <td>${member.date}</td>
+                    <td class="actions">
+                        <button onclick="editMember(${member.id})">✏️ تعديل</button>
+                        <button class="delete-btn" onclick="deleteMember(${member.id})">🗑️ حذف</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // التعديل
+        function editMember(id) {
+            const member = members.find(m => m.id === id);
+            document.getElementById('name').value = member.name;
+            document.getElementById('branch').value = member.branch;
+            document.getElementById('shift').value = member.shift;
+            document.getElementById('joinDate').value = member.date;
+            editId = member.id;
+        }
+
+        // الحذف
+        function deleteMember(id) {
+            if(confirm('هل أنت متأكد من الحذف؟')) {
+                members = members.filter(m => m.id !== id);
+                saveData();
+                updateTable();
+            }
+        }
+
+        // تفريغ النموذج
+        function clearForm() {
+            document.getElementById('name').value = '';
+            document.getElementById('branch').value = '';
+            document.getElementById('shift').value = 'أ';
+            document.getElementById('joinDate').value = '';
+            editId = null;
+        }
+
+        // التصدير
+        function exportCSV() {
+            const csvContent = [
+                ['الرقم', 'الاسم', 'الفرع', 'النوبة', 'تاريخ الانتساب'],
+                ...members.map((m, i) => [i+1, m.name, m.branch, m.shift, m.date])
+            ].map(row => row.join(',')).join('\n');
+
+            const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `الكوادر_${new Date().toISOString().slice(0,10)}.csv`;
+            link.click();
+        }
+
+        // الاستيراد
+        function importCSV(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const rows = e.target.result.split('\n').slice(1).filter(r => r.trim());
+                const newMembers = rows.map(row => {
+                    const [num, name, branch, shift, date] = row.split(',');
+                    return {
+                        id: Date.now(),
+                        name: (name || '').trim().replace(/"/g, ''),
+                        branch: (branch || '').trim().replace(/"/g, ''),
+                        shift: (shift || 'أ').trim().replace(/[aAjJ]/g, m => m.toLowerCase() === 'a' ? 'أ' : 'ج'),
+                        date: (date || '').trim()
+                    };
+                }).filter(m => m.name && m.branch && m.date);
+
+                members = [...members, ...newMembers];
+                saveData();
+                updateTable();
+                alert(`تم استيراد ${newMembers.length} سجلاً`);
+            };
+            reader.readAsText(file, 'UTF-8');
+        }
+
+        // الطباعة
+        function showPrint() {
+            const printContent = document.getElementById('mainTable').outerHTML;
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write(`
+                <html dir="rtl">
+                <head>
+                    <title>طباعة الكوادر</title>
+                    <style>
+                        table { 
+                            width: 100%; 
+                            border-collapse: collapse;
+                            direction: rtl;
+                        }
+                        th, td { 
+                            padding: 12px; 
+                            border: 1px solid #000; 
+                            text-align: center;
+                        }
+                        th { 
+                            background: #1a73e8; 
+                            color: white; 
+                        }
+                        
+                        th:nth-child(6),
+                        td:nth-child(6) {
+                            display: none;
+                        }
+                    </style>
+                </head>
+                <body>
+                    <h2 style="text-align:center; margin:20px 0">كشف الكوادر</h2>
+                    ${printContent}
+                </body>
+                </html>
+            `);
+            printWindow.document.close();
+            printWindow.print();
+        }
+
+        // Service Worker
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js')
+                .then(reg => console.log('Service Worker مسجل!'))
+                .catch(err => console.log('خطأ في التسجيل:', err));
+            });
+        }
+
+        // التحميل الأولي
+        window.addEventListener('load', updateTable);
+    </script>
+</body>
+</html>
